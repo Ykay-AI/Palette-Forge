@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Palette Forge — Color Palette Generator</title>
+<meta name="description" content="An advanced, keyboard-driven color palette generator with harmony modes, live UI preview, contrast checking, and code export." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="noise-overlay" aria-hidden="true"></div>
+
+<div class="app">
+
+  <header class="hero">
+    <div class="hero-left">
+      <p class="eyebrow">palette&nbsp;/&nbsp;lab</p>
+      <h1>Palette&nbsp;Forge</h1>
+      <p class="subtitle">
+        Press <kbd>Space</kbd> to shuffle · click a swatch to copy its hex · click the lock to keep a color · press <kbd>1</kbd>–<kbd>8</kbd> to lock a swatch by position
+      </p>
+    </div>
+    <div class="hero-right">
+      <div class="mode-select" id="modeSelect" role="group" aria-label="Harmony mode">
+        <!-- mode pills injected -->
+      </div>
+    </div>
+  </header>
+
+  <section class="palette-strip" id="paletteStrip" aria-label="Generated color palette">
+    <!-- swatch columns injected by script.js -->
+  </section>
+
+  <section class="controls">
+    <div class="control-group count-stepper" aria-label="Number of colors">
+      <span class="control-label">Colors</span>
+      <button class="stepper-btn" id="countDown" aria-label="Fewer colors">–</button>
+      <span class="count-value" id="countValue">5</span>
+      <button class="stepper-btn" id="countUp" aria-label="More colors">+</button>
+    </div>
+
+    <div class="control-group action-group">
+      <button class="btn btn-primary" id="generateBtn">
+        <span class="btn-icon">⟲</span> Shuffle
+      </button>
+      <button class="btn btn-ghost" id="undoBtn" aria-label="Undo" disabled>↶</button>
+      <button class="btn btn-ghost" id="redoBtn" aria-label="Redo" disabled>↷</button>
+      <button class="btn btn-ghost" id="saveBtn">☆ Save palette</button>
+    </div>
+  </section>
+
+  <section class="detail-grid">
+    <div class="panel preview-panel">
+      <div class="panel-head">
+        <h2>Live preview</h2>
+        <p class="panel-sub">The palette applied to a real interface, updated instantly.</p>
+      </div>
+      <div class="preview-card" id="previewCard">
+        <!-- mockup UI injected -->
+      </div>
+    </div>
+
+    <div class="panel inspector-panel">
+      <div class="panel-head">
+        <h2>Inspect <span class="inspector-name" id="inspectorName"></span></h2>
+        <p class="panel-sub">Click any swatch above to inspect its shade ramp and contrast.</p>
+      </div>
+
+      <div class="shade-ramp" id="shadeRamp"></div>
+
+      <div class="contrast-block" id="contrastBlock"></div>
+    </div>
+  </section>
+
+  <section class="panel export-panel">
+    <div class="panel-head">
+      <h2>Export</h2>
+      <p class="panel-sub">Drop this straight into a stylesheet or config file.</p>
+    </div>
+
+    <div class="export-tabs" id="exportTabs" role="tablist"></div>
+
+    <div class="export-body">
+      <pre class="export-code"><code id="exportCode"></code></pre>
+      <button class="btn btn-ghost copy-export-btn" id="copyExportBtn">Copy code</button>
+    </div>
+  </section>
+
+  <section class="panel saved-panel">
+    <div class="panel-head">
+      <h2>Saved palettes</h2>
+      <p class="panel-sub" id="savedSub">Palettes you save stay in this browser.</p>
+    </div>
+    <div class="saved-list" id="savedList"></div>
+  </section>
+
+  <footer class="site-footer">
+    <p>Built with vanilla JS — no frameworks, no build step. Fork it, style it, ship it.</p>
+  </footer>
+
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
