@@ -317,21 +317,24 @@
       el.tabIndex = 0;
       el.draggable = true;
       el.setAttribute("role", "button");
-      el.setAttribute("aria-label", `Color ${i + 1}, ${hex}. Click to copy, drag to reorder.`);
+      el.setAttribute("aria-label", `Color ${i + 1}, ${hex}. Click to inspect, click the hex code to copy, drag to reorder.`);
 
       el.innerHTML = `
         <span class="swatch-position">${i + 1}</span>
         <span class="swatch-lock ${state.locked[i] ? "locked" : ""}" data-lock="${i}" title="${state.locked[i] ? "Unlock" : "Lock"} this color">${state.locked[i] ? "🔒" : "🔓"}</span>
         <span class="swatch-copied" id="copied-${i}">Copied</span>
         <span class="swatch-name">${nearestColorName(hex)}</span>
-        <span class="swatch-hex">${hex}</span>
+        <span class="swatch-hex" data-copy="${i}" title="Copy ${hex}">${hex}</span>
       `;
 
       el.addEventListener("click", (e) => {
         if (e.target.closest(".swatch-lock")) return;
+        if (e.target.closest(".swatch-hex")) {
+          copyToClipboard(hex);
+          flashCopied(i);
+          return;
+        }
         state.selected = i;
-        copyToClipboard(hex);
-        flashCopied(i);
         renderSwatches();
         renderInspector();
       });
@@ -460,7 +463,6 @@
     pushHistory();
     state.colors[i] = hex;
     renderAll();
-    copyToClipboard(hex);
     showToast(`Applied ${hex} to swatch ${i + 1}`);
   }
 
