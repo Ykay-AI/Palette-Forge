@@ -16,6 +16,23 @@
 
 <div class="noise-overlay" aria-hidden="true"></div>
 
+<svg class="cvd-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="cvd-protanopia" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.567 0.433 0 0 0  0.558 0.442 0 0 0  0 0.242 0.758 0 0  0 0 0 1 0" />
+    </filter>
+    <filter id="cvd-deuteranopia" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0" />
+    </filter>
+    <filter id="cvd-tritanopia" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.433 0.567 0 0  0 0.475 0.525 0 0  0 0 0 1 0" />
+    </filter>
+    <filter id="cvd-achromatopsia" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0" />
+    </filter>
+  </defs>
+</svg>
+
 <div class="app">
 
   <header class="hero">
@@ -23,10 +40,11 @@
       <p class="eyebrow">palette&nbsp;/&nbsp;lab</p>
       <h1>Palette&nbsp;Forge</h1>
       <p class="subtitle">
-        Press <kbd>Space</kbd> to shuffle · click a swatch to copy its hex · click the lock to keep a color · press <kbd>1</kbd>–<kbd>8</kbd> to lock a swatch by position
+        Press <kbd>Space</kbd> to shuffle · click a swatch to copy its hex · click the lock to keep a color · press <kbd>1</kbd>–<kbd>8</kbd> to lock by position · drag a swatch to reorder it
       </p>
     </div>
     <div class="hero-right">
+      <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle light and dark theme" title="Toggle light / dark theme">🌙</button>
       <div class="mode-select" id="modeSelect" role="group" aria-label="Harmony mode">
         <!-- mode pills injected -->
       </div>
@@ -52,6 +70,25 @@
       <button class="btn btn-ghost" id="undoBtn" aria-label="Undo" disabled>↶</button>
       <button class="btn btn-ghost" id="redoBtn" aria-label="Redo" disabled>↷</button>
       <button class="btn btn-ghost" id="saveBtn">☆ Save palette</button>
+    </div>
+
+    <div class="control-group extra-group">
+      <label class="btn btn-ghost file-btn" for="imageInput" title="Extract a palette from an image">
+        ⇧ Image → palette
+      </label>
+      <input type="file" id="imageInput" accept="image/*" hidden />
+
+      <button class="btn btn-ghost" id="shareBtn" title="Copy a link to this exact palette">
+        🔗 Copy link
+      </button>
+
+      <select class="select-cvd" id="cvdSelect" aria-label="Simulate color vision deficiency" title="Preview how this palette looks with color vision deficiencies">
+        <option value="normal">Normal vision</option>
+        <option value="protanopia">Protanopia</option>
+        <option value="deuteranopia">Deuteranopia</option>
+        <option value="tritanopia">Tritanopia</option>
+        <option value="achromatopsia">Achromatopsia</option>
+      </select>
     </div>
   </section>
 
@@ -101,7 +138,7 @@
   </section>
 
   <footer class="site-footer">
-    <p>Built with vanilla JS — no frameworks, no build step. Fork it, style it, ship it.</p>
+    <p>Built with vanilla JS — no frameworks, no build step. Style it up! YK Makes</p>
   </footer>
 
 </div>

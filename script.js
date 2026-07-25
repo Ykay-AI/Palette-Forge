@@ -217,6 +217,8 @@
     exportFormat: "css",
   };
 
+  let draggingIndex = null;
+
   function snapshot() {
     return { colors: [...state.colors], locked: [...state.locked] };
   }
@@ -313,8 +315,9 @@
       el.style.background = hex;
       el.style.color = fg;
       el.tabIndex = 0;
+      el.draggable = true;
       el.setAttribute("role", "button");
-      el.setAttribute("aria-label", `Color ${i + 1}, ${hex}. Click to copy.`);
+      el.setAttribute("aria-label", `Color ${i + 1}, ${hex}. Click to copy, drag to reorder.`);
 
       el.innerHTML = `
         <span class="swatch-position">${i + 1}</span>
@@ -341,10 +344,44 @@
       });
 
       const lockEl = el.querySelector(".swatch-lock");
+      lockEl.draggable = false;
       lockEl.addEventListener("click", (e) => {
         e.stopPropagation();
         state.locked[i] = !state.locked[i];
         renderSwatches();
+      });
+
+      el.addEventListener("dragstart", (e) => {
+        draggingIndex = i;
+        el.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(i));
+      });
+      el.addEventListener("dragend", () => {
+        el.classList.remove("dragging");
+      });
+      el.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        el.classList.add("drag-over");
+      });
+      el.addEventListener("dragleave", () => {
+        el.classList.remove("drag-over");
+      });
+      el.addEventListener("drop", (e) => {
+        e.preventDefault();
+        el.classList.remove("drag-over");
+        const from = draggingIndex;
+        const to = i;
+        draggingIndex = null;
+        if (from === null || from === to) return;
+        pushHistory();
+        const [movedColor] = state.colors.splice(from, 1);
+        const [movedLock] = state.locked.splice(from, 1);
+        state.colors.splice(to, 0, movedColor);
+        state.locked.splice(to, 0, movedLock);
+        state.selected = to;
+        renderAll();
       });
 
       paletteStrip.appendChild(el);
@@ -416,6 +453,17 @@
     { label: "900", light: 11 },
   ];
 
+  function applyShadeToSelected(hex) {
+    const i = state.selected;
+    if (i == null || !state.colors[i]) return;
+    if (state.colors[i] === hex) return; // no-op, avoid empty history entries
+    pushHistory();
+    state.colors[i] = hex;
+    renderAll();
+    copyToClipboard(hex);
+    showToast(`Applied ${hex} to swatch ${i + 1}`);
+  }
+
   function renderInspector() {
     const hex = state.colors[state.selected] || state.colors[0];
     if (!hex) return;
@@ -431,10 +479,9 @@
       el.style.background = stepHex;
       el.style.color = fg;
       el.innerHTML = `<span>${step.label}</span>`;
-      el.title = stepHex;
+      el.title = `Apply ${stepHex} to swatch ${state.selected + 1}`;
       el.addEventListener("click", () => {
-        copyToClipboard(stepHex);
-        showToast(`Copied ${stepHex}`);
+        applyShadeToSelected(stepHex);
       });
       shadeRamp.appendChild(el);
     });
@@ -601,6 +648,198 @@
   }
 
   /* ------------------------------------------------------------------ *
+   *  Theme (light / dark)
+   * ------------------------------------------------------------------ */
+
+  const THEME_KEY = "palette-forge:theme";
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* noop */ }
+    const btn = $("#themeToggle");
+    if (btn) btn.textContent = theme === "light" ? "☀️" : "🌙";
+  }
+
+  function initTheme() {
+    let saved = "dark";
+    try { saved = localStorage.getItem(THEME_KEY) || "dark"; } catch (e) { /* noop */ }
+    applyTheme(saved);
+    $("#themeToggle").addEventListener("click", () => {
+      const current = document.documentElement.getAttribute("data-theme") || "dark";
+      applyTheme(current === "dark" ? "light" : "dark");
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   *  Shareable URL
+   * ------------------------------------------------------------------ */
+
+  function updateURL() {
+    const params = new URLSearchParams();
+    params.set("colors", state.colors.map((c) => c.replace("#", "")).join("-"));
+    params.set("mode", state.mode);
+    const newUrl = `${location.pathname}?${params.toString()}`;
+    history.replaceState(null, "", newUrl);
+  }
+
+  function loadFromURL() {
+    const params = new URLSearchParams(location.search);
+    const colorsParam = params.get("colors");
+    if (!colorsParam) return false;
+    const hexes = colorsParam
+      .split("-")
+      .map((h) => `#${h.toUpperCase()}`)
+      .filter((h) => /^#[0-9A-F]{6}$/.test(h));
+    if (!hexes.length) return false;
+
+    state.colors = hexes.slice(0, 8);
+    state.count = state.colors.length;
+    state.locked = new Array(state.count).fill(false);
+    const mode = params.get("mode");
+    if (mode && MODES.some((m) => m.id === mode)) state.mode = mode;
+    return true;
+  }
+
+  /* ------------------------------------------------------------------ *
+   *  Colorblindness simulation (visual filter only — underlying hex
+   *  values are unchanged, so export/copy always reflect true colors)
+   * ------------------------------------------------------------------ */
+
+  function applyCVDFilter(mode) {
+    const filterValue = mode === "normal" ? "" : `url(#cvd-${mode})`;
+    paletteStrip.style.filter = filterValue;
+    previewCard.style.filter = filterValue;
+    shadeRamp.style.filter = filterValue;
+  }
+
+  /* ------------------------------------------------------------------ *
+   *  Image → palette extraction (k-means clustering)
+   * ------------------------------------------------------------------ */
+
+  function dist2(a, b) {
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+  }
+
+  // Farthest-point (maximin) seeding: after an initial random pick, each
+  // further centroid is the pixel that is farthest from every centroid
+  // chosen so far. This spreads seeds across distinct clusters instead of
+  // risking two seeds landing in the same color region, which is what
+  // plain random seeding does often enough to produce muddy results.
+  function seedCentroids(pixels, k) {
+    const centroids = [pixels[randomInt(0, pixels.length - 1)]];
+    const minDist = new Array(pixels.length).fill(Infinity);
+
+    while (centroids.length < k) {
+      const last = centroids[centroids.length - 1];
+      let farthestIdx = 0, farthestDist = -1;
+      for (let p = 0; p < pixels.length; p++) {
+        const d = dist2(pixels[p], last);
+        if (d < minDist[p]) minDist[p] = d;
+        if (minDist[p] > farthestDist) { farthestDist = minDist[p]; farthestIdx = p; }
+      }
+      centroids.push(pixels[farthestIdx]);
+    }
+    return centroids.map((c) => [...c]);
+  }
+
+  function kMeans(pixels, k, iterations = 10) {
+    k = Math.max(1, Math.min(k, pixels.length));
+    let centroids = seedCentroids(pixels, k);
+
+    let assignments = new Array(pixels.length).fill(0);
+
+    for (let iter = 0; iter < iterations; iter++) {
+      for (let p = 0; p < pixels.length; p++) {
+        let best = 0, bestDist = Infinity;
+        for (let c = 0; c < centroids.length; c++) {
+          const d = dist2(pixels[p], centroids[c]);
+          if (d < bestDist) { bestDist = d; best = c; }
+        }
+        assignments[p] = best;
+      }
+      const sums = centroids.map(() => [0, 0, 0, 0]);
+      for (let p = 0; p < pixels.length; p++) {
+        const c = assignments[p];
+        sums[c][0] += pixels[p][0];
+        sums[c][1] += pixels[p][1];
+        sums[c][2] += pixels[p][2];
+        sums[c][3] += 1;
+      }
+      centroids = centroids.map((old, c) =>
+        sums[c][3] ? [sums[c][0] / sums[c][3], sums[c][1] / sums[c][3], sums[c][2] / sums[c][3]] : old
+      );
+    }
+
+    const counts = new Array(centroids.length).fill(0);
+    assignments.forEach((c) => { counts[c] += 1; });
+
+    return centroids
+      .map((c, i) => ({ c, count: counts[i] }))
+      .sort((a, b) => b.count - a.count)
+      .map((x) => x.c);
+  }
+
+  function rgbToHex(r, g, b) {
+    const toHex = (v) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0");
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+  }
+
+  function extractPaletteFromImage(img, k) {
+    const canvas = document.createElement("canvas");
+    const maxDim = 120;
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    let data;
+    try {
+      data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    } catch (e) {
+      return []; // e.g. tainted canvas from a cross-origin image
+    }
+
+    const pixels = [];
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue;
+      pixels.push([data[i], data[i + 1], data[i + 2]]);
+    }
+    if (!pixels.length) return [];
+
+    return kMeans(pixels, k).map(([r, g, b]) => rgbToHex(r, g, b));
+  }
+
+  function handleImageFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const extracted = extractPaletteFromImage(img, state.count);
+        if (!extracted.length) {
+          showToast("Couldn't read colors from that image");
+          return;
+        }
+        pushHistory();
+        let ei = 0;
+        state.colors = state.colors.map((c, i) => {
+          if (state.locked[i]) return c;
+          const next = extracted[ei % extracted.length];
+          ei += 1;
+          return next;
+        });
+        renderAll();
+        showToast("Palette extracted from image");
+      };
+      img.onerror = () => showToast("Couldn't load that image");
+      img.src = ev.target.result;
+    };
+    reader.onerror = () => showToast("Couldn't read that file");
+    reader.readAsDataURL(file);
+  }
+
+  /* ------------------------------------------------------------------ *
    *  Undo / redo
    * ------------------------------------------------------------------ */
 
@@ -673,11 +912,18 @@
     renderInspector();
     renderExportCode();
     updateHistoryButtons();
+    updateURL();
   }
 
   function init() {
-    state.colors = generatePalette(state.mode, state.count, [], new Array(state.count).fill(false));
-    state.locked = new Array(state.count).fill(false);
+    initTheme();
+
+    const loadedFromURL = loadFromURL();
+    if (!loadedFromURL) {
+      state.colors = generatePalette(state.mode, state.count, [], new Array(state.count).fill(false));
+      state.locked = new Array(state.count).fill(false);
+    }
+    countValue.textContent = state.count;
 
     renderModePills();
     renderExportTabs();
@@ -696,6 +942,19 @@
       copyToClipboard(buildExport(state.exportFormat));
       showToast("Export copied");
     });
+
+    $("#shareBtn").addEventListener("click", () => {
+      updateURL();
+      copyToClipboard(location.href);
+      showToast("Link copied — paste it anywhere");
+    });
+
+    $("#imageInput").addEventListener("change", (e) => {
+      handleImageFile(e.target.files[0]);
+      e.target.value = "";
+    });
+
+    $("#cvdSelect").addEventListener("change", (e) => applyCVDFilter(e.target.value));
 
     document.addEventListener("keydown", (e) => {
       const tag = (e.target.tagName || "").toLowerCase();
