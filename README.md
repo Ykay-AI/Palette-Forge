@@ -2,7 +2,7 @@
 
 An advanced, dependency-free color palette generator — built to sit in a portfolio, not just a codepen. Vanilla HTML/CSS/JS, no build step, no frameworks.
 
-**[Live demo →](#)**https://portfolio.joytree.site/
+**[Live demo →](#)**https://color-palette.joytree.site/
 
 ## Why this is more than a swatch grid
 
